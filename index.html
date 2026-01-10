@@ -70,26 +70,18 @@
       return 'unknown';
     };
 
-    const getFigmaEmbedUrl = (url) => {
-      if (!url) return null;
-      
-      // Figma 공유 링크를 임베드 URL로 변환
-      if (url.includes('figma.com/file/')) {
-        return url;
-      }
-      
-      return url;
-    };
-
     const MediaCard = ({ media, onDelete, isLoggedIn }) => {
       const mediaType = detectMediaType(media.url);
       let embedUrl = null;
-      let displayUrl = media.url;
       
       if (mediaType === 'youtube') {
         embedUrl = convertToEmbedUrl(media.url);
       } else if (mediaType === 'figma') {
-        embedUrl = getFigmaEmbedUrl(media.url);
+        // Figma 프로토타입 미리보기 URL
+        embedUrl = media.url.includes('?') ? `${media.url}&embed_host=share` : `${media.url}?embed_host=share`;
+      } else if (mediaType === 'website') {
+        // 웹사이트 미리보기
+        embedUrl = media.url;
       }
 
       const getMediaIcon = () => {
@@ -118,6 +110,10 @@
         }
       };
 
+      const openInNewTab = () => {
+        window.open(media.url, '_blank');
+      };
+
       return (
         <div className="bg-slate-800 rounded-lg overflow-hidden shadow-lg border border-slate-700">
           {mediaType === 'youtube' && embedUrl && (
@@ -127,16 +123,36 @@
           )}
           
           {mediaType === 'figma' && embedUrl && (
-            <div className="aspect-video bg-slate-900">
-              <iframe className="w-full h-full" src={`${embedUrl}?node-id=0%3A1`} allowFullScreen />
+            <div 
+              className="aspect-video bg-slate-900 overflow-hidden relative group cursor-pointer"
+              onClick={openInNewTab}
+              title="클릭하여 Figma에서 열기"
+            >
+              <iframe 
+                className="w-full h-full" 
+                src={embedUrl}
+                allowFullScreen
+                style={{pointerEvents: 'none'}}
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-white text-sm bg-black/50 px-3 py-2 rounded">전체보기</span>
+              </div>
             </div>
           )}
-          
-          {mediaType === 'website' && (
-            <div className="aspect-video bg-slate-900 flex items-center justify-center">
-              <div className="text-center">
-                <div className="text-4xl mb-4">🌐</div>
-                <p className="text-slate-400 text-sm">웹사이트</p>
+
+          {mediaType === 'website' && embedUrl && (
+            <div 
+              className="aspect-video bg-slate-900 overflow-hidden relative group cursor-pointer"
+              onClick={openInNewTab}
+              title="클릭하여 웹사이트에서 열기"
+            >
+              <iframe 
+                className="w-full h-full scale-50 origin-top-left" 
+                src={embedUrl}
+                style={{width: '200%', height: '200%', pointerEvents: 'none'}}
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-white text-sm bg-black/50 px-3 py-2 rounded">전체보기</span>
               </div>
             </div>
           )}
@@ -158,11 +174,6 @@
                   <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">{getMediaLabel()}</span>
                 </div>
                 <h3 className="font-semibold text-white mb-2">{media.title}</h3>
-                {mediaType === 'website' && (
-                  <a href={media.url} target="_blank" rel="noopener noreferrer" className="text-cyan-400 hover:text-cyan-300 text-sm truncate block">
-                    열기 →
-                  </a>
-                )}
               </div>
               {isLoggedIn && (
                 <button onClick={() => onDelete(media.id)} className="flex items-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 px-3 py-2 rounded text-sm transition text-nowrap flex-shrink-0">
@@ -226,44 +237,71 @@
       const audioRef = useRef(null);
       const fileInputRef = useRef(null);
 
+      // localStorage에서 데이터 로드하는 함수
+      const loadFromStorage = (key, defaultValue) => {
+        try {
+          const stored = window.localStorage.getItem(key);
+          return stored ? JSON.parse(stored) : defaultValue;
+        } catch (e) {
+          return defaultValue;
+        }
+      };
+
+      // localStorage에 데이터 저장하는 함수
+      const saveToStorage = (key, value) => {
+        try {
+          window.localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) {
+          console.warn('Storage save failed:', e);
+        }
+      };
+
       const [isLoggedIn, setIsLoggedIn] = useState(false);
       const [showLoginModal, setShowLoginModal] = useState(false);
       const [passwordInput, setPasswordInput] = useState('');
       const ADMIN_PASSWORD = 'wjdwldud2025';
       
-      const [mainVideoUrl, setMainVideoUrl] = useState(convertToEmbedUrl('https://youtu.be/gqos6G0MnzM', true, true, true));
+      const [mainVideoUrl, setMainVideoUrl] = useState(() => 
+        loadFromStorage('mainVideoUrl', convertToEmbedUrl('https://youtu.be/gqos6G0MnzM', true, true, true))
+      );
       const [editingMainVideoUrl, setEditingMainVideoUrl] = useState('');
       
-      const [workItems, setWorkItems] = useState([
-        { id: 1, text: '신입 사원 업무 교육' },
-        { id: 2, text: '기존 사원 업무 교육' },
-        { id: 3, text: '온라인/오프라인 강의' },
-        { id: 4, text: 'CS 교육 기획 및 진행' },
-        { id: 5, text: '영상 교육 제작' },
-        { id: 6, text: '개인정보 보호 교육 기획 및 진행' },
-        { id: 7, text: '간단한 프로그램 개발' },
-        { id: 8, text: '상담 모니터링 진행 및 분석 보고' },
-        { id: 9, text: '프로모션 기획 및 진행' },
-      ]);
+      const [workItems, setWorkItems] = useState(() => 
+        loadFromStorage('workItems', [
+          { id: 1, text: '신입 사원 업무 교육' },
+          { id: 2, text: '기존 사원 업무 교육' },
+          { id: 3, text: '온라인/오프라인 강의' },
+          { id: 4, text: 'CS 교육 기획 및 진행' },
+          { id: 5, text: '영상 교육 제작' },
+          { id: 6, text: '개인정보 보호 교육 기획 및 진행' },
+          { id: 7, text: '간단한 프로그램 개발' },
+          { id: 8, text: '상담 모니터링 진행 및 분석 보고' },
+          { id: 9, text: '프로모션 기획 및 진행' },
+        ])
+      );
 
-      const [toolItems, setToolItems] = useState([
-        { id: 1, text: 'Microsoft Excel' },
-        { id: 2, text: 'Microsoft PowerPoint' },
-        { id: 3, text: 'Teams' },
-        { id: 4, text: 'Zoom' },
-        { id: 5, text: 'Premiere Pro' },
-        { id: 6, text: 'Aftereffect' },
-        { id: 7, text: 'Chat GPT / Python / Notion' },
-        { id: 8, text: '다양한 AI 툴' },
-      ]);
+      const [toolItems, setToolItems] = useState(() =>
+        loadFromStorage('toolItems', [
+          { id: 1, text: 'Microsoft Excel' },
+          { id: 2, text: 'Microsoft PowerPoint' },
+          { id: 3, text: 'Teams' },
+          { id: 4, text: 'Zoom' },
+          { id: 5, text: 'Premiere Pro' },
+          { id: 6, text: 'Aftereffect' },
+          { id: 7, text: 'Chat GPT / Python / Notion' },
+          { id: 8, text: '다양한 AI 툴' },
+        ])
+      );
 
       const [newWorkItem, setNewWorkItem] = useState('');
       const [newToolItem, setNewToolItem] = useState('');
       
-      const [portfolioMedias, setPortfolioMedias] = useState([
-        { id: 1, title: '개인정보 유용 사례 교육', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
-        { id: 2, title: '개인정보 유출 사례2', url: 'https://youtu.be/jNQXAC9IVRw' }
-      ]);
+      const [portfolioMedias, setPortfolioMedias] = useState(() =>
+        loadFromStorage('portfolioMedias', [
+          { id: 1, title: '개인정보 유용 사례 교육', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+          { id: 2, title: '개인정보 유출 사례2', url: 'https://youtu.be/jNQXAC9IVRw' }
+        ])
+      );
        
       const [email] = useState('jiyoung1013@gmail.com');
       const [phone] = useState('010-4007-1417');
@@ -276,6 +314,23 @@
       const [musicFileName, setMusicFileName] = useState('');
       const [isPlaying, setIsPlaying] = useState(false);
       const [volume, setVolume] = useState(0.5);
+
+      // 데이터 변경 시 localStorage에 저장
+      useEffect(() => {
+        saveToStorage('mainVideoUrl', mainVideoUrl);
+      }, [mainVideoUrl]);
+
+      useEffect(() => {
+        saveToStorage('workItems', workItems);
+      }, [workItems]);
+
+      useEffect(() => {
+        saveToStorage('toolItems', toolItems);
+      }, [toolItems]);
+
+      useEffect(() => {
+        saveToStorage('portfolioMedias', portfolioMedias);
+      }, [portfolioMedias]);
 
       const createItemHandler = (items, setItems, newItem, setNewItem) => () => {
         if (newItem.trim()) {
