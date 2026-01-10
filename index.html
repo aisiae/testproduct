@@ -14,7 +14,7 @@
   <div id="root"></div>
 
   <script type="text/babel">
-    const { useState, useEffect } = React;
+    const { useState, useEffect, useRef } = React;
 
     const convertToEmbedUrl = (url, autoplay = false, mute = false, loop = false) => {
       if (!url) return null;
@@ -46,7 +46,7 @@
         }
         return embedUrl;
       }
-      return url; // Return original url if no match
+      return url;
     };
 
     const ListItem = ({ item, onUpdate, onDelete, isLoggedIn }) => {
@@ -97,6 +97,9 @@
         lucide.createIcons();
       },);
 
+      const audioRef = useRef(null);
+      const fileInputRef = useRef(null);
+
       const [isLoggedIn, setIsLoggedIn] = useState(false);
       const [showLoginModal, setShowLoginModal] = useState(false);
       const [passwordInput, setPasswordInput] = useState('');
@@ -141,6 +144,12 @@
       
       const [newVideoTitle, setNewVideoTitle] = useState('');
       const [newVideoUrl, setNewVideoUrl] = useState('');
+
+      // 배경음악 관련 상태
+      const [backgroundMusicUrl, setBackgroundMusicUrl] = useState(null);
+      const [musicFileName, setMusicFileName] = useState('');
+      const [isPlaying, setIsPlaying] = useState(false);
+      const [volume, setVolume] = useState(0.5);
 
       const createItemHandler = (items, setItems, newItem, setNewItem) => () => {
         if (newItem.trim()) {
@@ -199,6 +208,59 @@
           }
       }
 
+      // 배경음악 파일 업로드 처리
+      const handleMusicUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const validTypes = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4'];
+          if (validTypes.includes(file.type)) {
+            const url = URL.createObjectURL(file);
+            setBackgroundMusicUrl(url);
+            setMusicFileName(file.name);
+            setIsPlaying(false);
+          } else {
+            alert('MP3, WAV, OGG, M4A 형식의 파일만 업로드 가능합니다.');
+          }
+        }
+      };
+
+      // 배경음악 재생/정지
+      const toggleMusicPlayback = () => {
+        if (audioRef.current) {
+          if (isPlaying) {
+            audioRef.current.pause();
+            setIsPlaying(false);
+          } else {
+            audioRef.current.play();
+            setIsPlaying(true);
+          }
+        }
+      };
+
+      // 볼륨 조절
+      const handleVolumeChange = (e) => {
+        const newVolume = parseFloat(e.target.value);
+        setVolume(newVolume);
+        if (audioRef.current) {
+          audioRef.current.volume = newVolume;
+        }
+      };
+
+      // 배경음악 삭제
+      const deleteMusicFile = () => {
+        if (window.confirm('배경음악을 삭제하시겠습니까?')) {
+          if (audioRef.current) {
+            audioRef.current.pause();
+          }
+          setBackgroundMusicUrl(null);
+          setMusicFileName('');
+          setIsPlaying(false);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        }
+      };
+
       const handleLogin = (e) => {
         e.preventDefault();
         if (passwordInput === ADMIN_PASSWORD) {
@@ -217,6 +279,8 @@
 
       return (
         <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
+          {backgroundMusicUrl && <audio ref={audioRef} src={backgroundMusicUrl} loop />}
+
           {showLoginModal && (
              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
                 <div className="w-full max-w-md">
@@ -248,17 +312,43 @@
           <nav className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur border-b border-slate-700/50">
             <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
               <h1 className="text-2xl font-bold text-cyan-400">J-PROJECT</h1>
-              {!isLoggedIn ? (
-                <button onClick={() => setShowLoginModal(true)} className="flex items-center gap-2 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 px-4 py-2 rounded-lg transition">
-                    <i data-lucide="log-in" style={{width: 18, height: 18}}></i>
-                    <span className="text-sm">관리자 로그인</span>
-                </button>
-              ) : (
-                <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 px-4 py-2 rounded-lg transition">
-                    <i data-lucide="log-out" style={{width: 18, height: 18}}></i>
-                    <span className="text-sm">로그아웃</span>
-                </button>
-              )}
+              <div className="flex items-center gap-4">
+                {backgroundMusicUrl && (
+                  <div className="flex items-center gap-3 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2">
+                    <button 
+                      onClick={toggleMusicPlayback}
+                      className="text-cyan-400 hover:text-cyan-300 transition"
+                      title={isPlaying ? '음악 정지' : '음악 재생'}
+                    >
+                      {isPlaying ? (
+                        <span className="text-lg">🔊</span>
+                      ) : (
+                        <span className="text-lg">🔇</span>
+                      )}
+                    </button>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="1" 
+                      step="0.1" 
+                      value={volume}
+                      onChange={handleVolumeChange}
+                      className="w-20 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                    />
+                  </div>
+                )}
+                {!isLoggedIn ? (
+                  <button onClick={() => setShowLoginModal(true)} className="flex items-center gap-2 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 px-4 py-2 rounded-lg transition">
+                      <i data-lucide="log-in" style={{width: 18, height: 18}}></i>
+                      <span className="text-sm">관리자 로그인</span>
+                  </button>
+                ) : (
+                  <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 px-4 py-2 rounded-lg transition">
+                      <i data-lucide="log-out" style={{width: 18, height: 18}}></i>
+                      <span className="text-sm">로그아웃</span>
+                  </button>
+                )}
+              </div>
             </div>
           </nav>
             <main>
@@ -381,6 +471,52 @@
                 )}
                 </div>
             </section>
+
+            {isLoggedIn && (
+              <section className="py-12 sm:py-16 bg-slate-900/50">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                  <h2 className="text-3xl font-bold mb-8 text-center text-cyan-300">배경음악 설정</h2>
+                  <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 max-w-2xl mx-auto">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-slate-300 text-sm font-medium mb-3">음악 파일 업로드</label>
+                        <div className="flex items-center gap-3">
+                          <input 
+                            ref={fileInputRef}
+                            type="file" 
+                            accept="audio/*"
+                            onChange={handleMusicUpload}
+                            className="hidden"
+                            id="music-upload"
+                          />
+                          <label htmlFor="music-upload" className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-lg font-medium transition cursor-pointer text-center">
+                            파일 선택
+                          </label>
+                          {musicFileName && (
+                            <span className="text-slate-300 text-sm truncate flex-1">{musicFileName}</span>
+                          )}
+                        </div>
+                      </div>
+                      {musicFileName && (
+                        <div className="flex items-center justify-between bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                          <div>
+                            <p className="text-sm text-slate-400">현재 음악</p>
+                            <p className="text-white font-medium">{musicFileName}</p>
+                          </div>
+                          <button 
+                            onClick={deleteMusicFile}
+                            className="flex items-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 px-3 py-2 rounded transition text-sm"
+                          >
+                            <i data-lucide="trash-2" style={{width: 16, height: 16}}></i> 삭제
+                          </button>
+                        </div>
+                      )}
+                      <p className="text-xs text-slate-400">지원 형식: MP3, WAV, OGG, M4A</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
 
             <section className="py-16 border-t border-slate-700">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
