@@ -56,16 +56,18 @@
 </head>
 <body>
   <div id="root"></div>
-  <audio id="bg-music" loop style="display: none;"></audio>
+  <!-- 자동재생용 audio 요소 (muted) -->
+  <audio id="bg-music" loop muted playsinline style="display: none;"></audio>
 
   <script>
     // ============================================
-    // 🎵 배경음악 관리자 (GitHub Raw URL 사용)
+    // 🎵 배경음악 관리자 (자동재생 최적화)
     // ============================================
     const AudioManager = {
       element: null,
       currentVolume: 30,
       isPlaying: false,
+      isMuted: true, // 초기 음소거 (자동재생 정책)
       // ⭐ 당신의 GitHub 음악 Raw URL
       GITHUB_MUSIC_URL: 'https://raw.githubusercontent.com/aisiae/testproduct/main/music/햇살이%20드리우는%20듯한%20시작을%20알리는%20조용하지만%20밝은%20배경.mp3',
 
@@ -77,19 +79,20 @@
         }
 
         this.currentVolume = parseInt(localStorage.getItem('musicVolume') || '30');
+        const wasMuted = localStorage.getItem('musicMuted') !== 'false'; // 기본값: 음소거됨
         const wasPlaying = localStorage.getItem('musicWasPlaying') === 'true';
 
+        this.isMuted = wasMuted;
+        this.element.muted = this.isMuted;
         this.element.volume = this.currentVolume / 100;
         
         // GitHub Raw URL에서 음악 로드
         this.element.src = this.GITHUB_MUSIC_URL;
         console.log('✅ GitHub 음악 URL 설정 완료');
+        console.log('🔇 초기 상태: 음소거 상태에서 자동재생');
 
-        if (wasPlaying) {
-          setTimeout(() => {
-            this.play();
-          }, 1500);
-        }
+        // 페이지 로드 후 즉시 재생 시도 (음소거 상태)
+        this.playWithAutoplayPolicy();
 
         this.element.addEventListener('play', () => {
           this.isPlaying = true;
@@ -107,16 +110,30 @@
 
         this.element.addEventListener('error', (e) => {
           console.error('❌ 음악 파일 로드 실패:', e);
-          alert('❌ 음악을 불러올 수 없습니다.\n\n확인할 사항:\n1. GitHub Raw URL이 맞는지 확인\n2. 브라우저 개발자도구(F12)에서 콘솔 확인');
         });
 
         this.element.addEventListener('canplay', () => {
           console.log('✅ 음악 재생 준비 완료');
         });
+      },
 
-        this.element.addEventListener('loadstart', () => {
-          console.log('⏳ 음악 파일 로딩 중...');
-        });
+      playWithAutoplayPolicy() {
+        // 음소거 상태에서 자동재생 시도
+        const playPromise = this.element.play();
+        
+        if (playPromise !== undefined) {
+          playPromise
+            .then(() => {
+              console.log('✅ 자동재생 성공 (음소거 상태)');
+              this.isPlaying = true;
+            })
+            .catch((e) => {
+              console.log('⚠️ 자동재생 실패:', e.name);
+              // 자동재생 실패 시 사용자 인터랙션 대기
+              document.addEventListener('click', () => this.play(), { once: true });
+              console.log('💡 첫 클릭 시 음악이 재생됩니다.');
+            });
+        }
       },
 
       play() {
@@ -128,8 +145,7 @@
         const playPromise = this.element.play();
         if (playPromise !== undefined) {
           playPromise.catch(e => {
-            console.log('⚠️ 자동재생 차단됨 (브라우저 정책)');
-            localStorage.setItem('musicWasPlaying', 'false');
+            console.log('⚠️ 재생 실패:', e);
           });
         }
       },
@@ -146,6 +162,23 @@
         }
       },
 
+      toggleMute() {
+        this.isMuted = !this.isMuted;
+        this.element.muted = this.isMuted;
+        localStorage.setItem('musicMuted', !this.isMuted);
+        
+        if (this.isMuted) {
+          console.log('🔇 음소거됨');
+          this.play(); // 음소거 상태로 재생 계속
+        } else {
+          console.log('🔊 음소거 해제');
+          this.play();
+        }
+        
+        UI.updateMusicButton();
+        return this.isMuted;
+      },
+
       setVolume(percent) {
         this.currentVolume = Math.max(0, Math.min(100, parseInt(percent)));
         this.element.volume = this.currentVolume / 100;
@@ -154,6 +187,12 @@
 
       getMusicIcon() {
         if (!this.element.src) return '❌';
+        
+        // 음소거 상태인지 확인
+        if (this.isMuted) {
+          return '🔇';
+        }
+        
         if (this.currentVolume === 0) return '🔇';
         if (this.currentVolume < 33) return '🔈';
         if (this.currentVolume < 67) return '🔉';
@@ -178,13 +217,16 @@
                 <h1 class="text-2xl font-bold text-cyan-400">J-PROJECT</h1>
                 <div class="flex items-center gap-4 flex-wrap">
                   <div class="flex items-center gap-3 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2">
+                    <!-- 음소거 토글 버튼 -->
                     <button 
-                      id="music-toggle"
+                      id="mute-toggle"
                       class="text-cyan-400 hover:text-cyan-300 transition text-lg"
-                      title="음악 재생/정지"
+                      title="음소거 토글"
                     >
-                      ${AudioManager.getMusicIcon()}
+                      🔇
                     </button>
+                    
+                    <!-- 음량 슬라이더 -->
                     <input 
                       id="volume-slider"
                       type="range" 
@@ -315,7 +357,7 @@
                   ></textarea>
                   
                   <button id="save-url-btn" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg transition">
-                    💾 URL 저장 및 재생
+                    💾 URL 저장
                   </button>
                 </div>
               </div>
@@ -328,19 +370,34 @@
       },
 
       attachEventListeners() {
-        const musicToggleBtn = document.getElementById('music-toggle');
-        if (musicToggleBtn) {
-          musicToggleBtn.addEventListener('click', () => AudioManager.toggle());
+        // 음소거 토글 버튼
+        const muteToggleBtn = document.getElementById('mute-toggle');
+        if (muteToggleBtn) {
+          muteToggleBtn.addEventListener('click', () => {
+            AudioManager.toggleMute();
+          });
         }
 
+        // 음량 슬라이더
         const volumeSlider = document.getElementById('volume-slider');
         if (volumeSlider) {
           volumeSlider.addEventListener('change', (e) => {
             AudioManager.setVolume(e.target.value);
+            // 음량을 조절하면 자동으로 음소거 해제
+            if (AudioManager.isMuted && AudioManager.currentVolume > 0) {
+              AudioManager.isMuted = false;
+              AudioManager.element.muted = false;
+              localStorage.setItem('musicMuted', 'false');
+            }
             this.updateMusicButton();
           });
           volumeSlider.addEventListener('input', (e) => {
             AudioManager.setVolume(e.target.value);
+            if (AudioManager.isMuted && AudioManager.currentVolume > 0) {
+              AudioManager.isMuted = false;
+              AudioManager.element.muted = false;
+              localStorage.setItem('musicMuted', 'false');
+            }
             this.updateMusicButton();
           });
         }
@@ -372,7 +429,7 @@
       },
 
       updateMusicButton() {
-        const btn = document.getElementById('music-toggle');
+        const btn = document.getElementById('mute-toggle');
         if (btn) {
           btn.textContent = AudioManager.getMusicIcon();
         }
@@ -424,29 +481,26 @@
           return;
         }
 
-        if (!newUrl.includes('raw.githubusercontent.com')) {
-          alert('⚠️ 주의: raw.githubusercontent.com으로 시작하는 Raw URL을 사용하세요!');
-          return;
-        }
-
         AudioManager.GITHUB_MUSIC_URL = newUrl;
         AudioManager.element.src = newUrl;
         localStorage.setItem('musicUrl', newUrl);
 
-        alert('✅ 음악 URL이 변경되었습니다!\n음악을 재생합니다...');
+        alert('✅ 음악 URL이 변경되었습니다!');
         this.hideMusicUrlModal();
-        AudioManager.play();
       }
     };
 
     // 앱 초기화
     document.addEventListener('DOMContentLoaded', () => {
       console.log('🚀 포트폴리오 앱 시작...');
+      console.log('🔇 음소거 상태에서 자동재생 시도 중...');
+      
       // localStorage에서 저장된 URL 불러오기
       const savedUrl = localStorage.getItem('musicUrl');
       if (savedUrl) {
         AudioManager.GITHUB_MUSIC_URL = savedUrl;
       }
+      
       AudioManager.init();
       UI.render();
     });
