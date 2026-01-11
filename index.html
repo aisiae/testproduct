@@ -1,509 +1,752 @@
 <!DOCTYPE html>
-<html lang="ko">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>J-PROJECT Portfolio</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-
-    html {
-      scroll-behavior: smooth;
-    }
-
-    input[type='range'] {
-      -webkit-appearance: none;
-      width: 100%;
-      height: 4px;
-      border-radius: 2px;
-      background: #334155;
-      outline: none;
-    }
-
-    input[type='range']::-webkit-slider-thumb {
-      -webkit-appearance: none;
-      appearance: none;
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: #06b6d4;
-      cursor: pointer;
-    }
-
-    input[type='range']::-moz-range-thumb {
-      width: 12px;
-      height: 12px;
-      border-radius: 50%;
-      background: #06b6d4;
-      cursor: pointer;
-      border: none;
-    }
-
-    #music-url-modal {
-      animation: fadeIn 0.3s ease;
-    }
-
-    @keyframes fadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-  </style>
+  <script src="https://unpkg.com/react@17/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
 </head>
 <body>
   <div id="root"></div>
-  <!-- 자동재생용 audio 요소 (muted) -->
-  <audio id="bg-music" loop muted playsinline style="display: none;"></audio>
 
-  <script>
-    // ============================================
-    // 🎵 배경음악 관리자 (자동재생 최적화)
-    // ============================================
-    const AudioManager = {
-      element: null,
-      currentVolume: 30,
-      isPlaying: false,
-      isMuted: true, // 초기 음소거 (자동재생 정책)
-      // ⭐ 당신의 GitHub 음악 Raw URL
-      GITHUB_MUSIC_URL: 'https://raw.githubusercontent.com/aisiae/testproduct/main/music/햇살이%20드리우는%20듯한%20시작을%20알리는%20조용하지만%20밝은%20배경.mp3',
+  <script type="text/babel">
+    const { useState, useEffect, useRef } = React;
 
-      init() {
-        this.element = document.getElementById('bg-music');
-        if (!this.element) {
-          console.error('❌ 오디오 요소를 찾을 수 없습니다');
-          return;
+    // ============ 유틸리티 함수 ============
+    const convertToEmbedUrl = (url, autoplay = false, mute = false, loop = false) => {
+      if (!url) return null;
+      let videoId = null;
+      const patterns = [
+        /(?:https?:\/\/)?(?:www\.)?youtube\.com\/watch\?v=([a-zA-Z0-9_-]{11})/,
+        /(?:https?:\/\/)?(?:www\.)?youtu\.be\/([a-zA-Z0-9_-]{11})/,
+        /(?:https?:\/\/)?(?:www\.)?youtube\.com\/embed\/([a-zA-Z0-9_-]{11})/
+      ];
+      for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match && match[1]) {
+          videoId = match[1];
+          break;
         }
-
-        this.currentVolume = parseInt(localStorage.getItem('musicVolume') || '30');
-        const wasMuted = localStorage.getItem('musicMuted') !== 'false'; // 기본값: 음소거됨
-        const wasPlaying = localStorage.getItem('musicWasPlaying') === 'true';
-
-        this.isMuted = wasMuted;
-        this.element.muted = this.isMuted;
-        this.element.volume = this.currentVolume / 100;
-        
-        // GitHub Raw URL에서 음악 로드
-        this.element.src = this.GITHUB_MUSIC_URL;
-        console.log('✅ GitHub 음악 URL 설정 완료');
-        console.log('🔇 초기 상태: 음소거 상태에서 자동재생');
-
-        // 페이지 로드 후 즉시 재생 시도 (음소거 상태)
-        this.playWithAutoplayPolicy();
-
-        this.element.addEventListener('play', () => {
-          this.isPlaying = true;
-          localStorage.setItem('musicWasPlaying', 'true');
-          UI.updateMusicButton();
-          console.log('▶️ 음악 재생 중');
-        });
-
-        this.element.addEventListener('pause', () => {
-          this.isPlaying = false;
-          localStorage.setItem('musicWasPlaying', 'false');
-          UI.updateMusicButton();
-          console.log('⏸️ 음악 일시정지');
-        });
-
-        this.element.addEventListener('error', (e) => {
-          console.error('❌ 음악 파일 로드 실패:', e);
-        });
-
-        this.element.addEventListener('canplay', () => {
-          console.log('✅ 음악 재생 준비 완료');
-        });
-      },
-
-      playWithAutoplayPolicy() {
-        // 음소거 상태에서 자동재생 시도
-        const playPromise = this.element.play();
-        
-        if (playPromise !== undefined) {
-          playPromise
-            .then(() => {
-              console.log('✅ 자동재생 성공 (음소거 상태)');
-              this.isPlaying = true;
-            })
-            .catch((e) => {
-              console.log('⚠️ 자동재생 실패:', e.name);
-              // 자동재생 실패 시 사용자 인터랙션 대기
-              document.addEventListener('click', () => this.play(), { once: true });
-              console.log('💡 첫 클릭 시 음악이 재생됩니다.');
-            });
-        }
-      },
-
-      play() {
-        if (!this.element.src) {
-          alert('음악 파일 URL이 설정되지 않았습니다.');
-          return;
-        }
-
-        const playPromise = this.element.play();
-        if (playPromise !== undefined) {
-          playPromise.catch(e => {
-            console.log('⚠️ 재생 실패:', e);
-          });
-        }
-      },
-
-      pause() {
-        this.element.pause();
-      },
-
-      toggle() {
-        if (this.element.paused) {
-          this.play();
-        } else {
-          this.pause();
-        }
-      },
-
-      toggleMute() {
-        this.isMuted = !this.isMuted;
-        this.element.muted = this.isMuted;
-        localStorage.setItem('musicMuted', !this.isMuted);
-        
-        if (this.isMuted) {
-          console.log('🔇 음소거됨');
-          this.play(); // 음소거 상태로 재생 계속
-        } else {
-          console.log('🔊 음소거 해제');
-          this.play();
-        }
-        
-        UI.updateMusicButton();
-        return this.isMuted;
-      },
-
-      setVolume(percent) {
-        this.currentVolume = Math.max(0, Math.min(100, parseInt(percent)));
-        this.element.volume = this.currentVolume / 100;
-        localStorage.setItem('musicVolume', this.currentVolume);
-      },
-
-      getMusicIcon() {
-        if (!this.element.src) return '❌';
-        
-        // 음소거 상태인지 확인
-        if (this.isMuted) {
-          return '🔇';
-        }
-        
-        if (this.currentVolume === 0) return '🔇';
-        if (this.currentVolume < 33) return '🔈';
-        if (this.currentVolume < 67) return '🔉';
-        return '🔊';
       }
+      
+      if (videoId) {
+        let embedUrl = `https://www.youtube.com/embed/${videoId}`;
+        const params = [];
+        if (autoplay) params.push('autoplay=1');
+        if (mute) params.push('mute=1');
+        if (loop) {
+            params.push('loop=1');
+            params.push(`playlist=${videoId}`);
+        }
+        if (params.length > 0) {
+            embedUrl += `?${params.join('&')}`;
+        }
+        return embedUrl;
+      }
+      return url;
     };
 
-    // ============================================
-    // 🎨 UI 관리자
-    // ============================================
-    const UI = {
-      isLoggedIn: false,
+    const detectMediaType = (url) => {
+      if (!url) return 'unknown';
+      if (url.includes('youtube.com') || url.includes('youtu.be')) {
+        return 'youtube';
+      }
+      if (url.includes('figma.com')) {
+        return 'figma';
+      }
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        return 'website';
+      }
+      return 'unknown';
+    };
 
-      render() {
-        const root = document.getElementById('root');
+    // ============ 컴포넌트 ============
+    const MediaCard = ({ media, onDelete, isLoggedIn }) => {
+      const mediaType = detectMediaType(media.url);
+      let embedUrl = null;
+      
+      if (mediaType === 'youtube') {
+        embedUrl = convertToEmbedUrl(media.url);
+      } else if (mediaType === 'figma') {
+        embedUrl = media.url.includes('?') ? `${media.url}&embed_host=share` : `${media.url}?embed_host=share`;
+      } else if (mediaType === 'website') {
+        embedUrl = media.url;
+      }
 
-        root.innerHTML = `
-          <div class="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
-            <!-- 네비게이션 -->
-            <nav class="sticky top-0 z-40 bg-slate-900/95 backdrop-blur border-b border-slate-700/50">
-              <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center flex-wrap gap-4">
-                <h1 class="text-2xl font-bold text-cyan-400">J-PROJECT</h1>
-                <div class="flex items-center gap-4 flex-wrap">
-                  <div class="flex items-center gap-3 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2">
-                    <!-- 음소거 토글 버튼 -->
-                    <button 
-                      id="mute-toggle"
-                      class="text-cyan-400 hover:text-cyan-300 transition text-lg"
-                      title="음소거 토글"
-                    >
-                      🔇
-                    </button>
-                    
-                    <!-- 음량 슬라이더 -->
-                    <input 
-                      id="volume-slider"
-                      type="range" 
-                      min="0" max="100" 
-                      value="${AudioManager.currentVolume}"
-                      class="w-20 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400"
-                      title="음량 조절"
-                    />
-                    <span class="text-xs text-slate-400 w-8 text-right">${AudioManager.currentVolume}%</span>
-                  </div>
-                  ${!this.isLoggedIn ? `
-                    <button id="login-btn" class="flex items-center gap-2 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 px-4 py-2 rounded-lg transition text-sm">
-                      🔐 로그인
-                    </button>
-                  ` : `
-                    <button id="music-url-btn" class="flex items-center gap-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 px-4 py-2 rounded-lg transition text-sm">
-                      🎵 음악 URL
-                    </button>
-                    <button id="logout-btn" class="flex items-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 px-4 py-2 rounded-lg transition text-sm">
-                      🚪 로그아웃
-                    </button>
-                  `}
-                </div>
-              </div>
-            </nav>
+      const getMediaIcon = () => {
+        const icons = { youtube: '▶️', figma: '🎨', website: '🌐' };
+        return icons[mediaType] || '📱';
+      };
 
-            <main>
-              <!-- 메인 영상 -->
-              <section class="py-12 sm:py-16">
-                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                  <h2 class="text-2xl font-bold mb-8 text-center text-cyan-300">메인 영상</h2>
-                  <div class="aspect-video bg-slate-800 rounded-lg overflow-hidden shadow-lg border border-slate-700 mb-8">
-                    <iframe width="100%" height="100%" src="https://www.youtube.com/embed/gqos6G0MnzM?autoplay=1&mute=1&loop=1&playlist=gqos6G0MnzM" title="Main Video" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
-                  </div>
-                </div>
-              </section>
+      const getMediaLabel = () => {
+        const labels = { youtube: 'YouTube 영상', figma: 'Figma 프로토타입', website: '웹사이트' };
+        return labels[mediaType] || '미디어';
+      };
 
-              <!-- 소개 -->
-              <section class="py-12 sm:py-16 text-center">
-                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                  <h2 class="text-3xl font-bold mb-4 text-cyan-200">안녕하세요! 교육의 효율을 디자인하는</h2>
-                  <h2 class="text-3xl font-bold mb-3 text-cyan-200">강사 정지영입니다.</h2>
-                  <div class="text-slate-200 space-y-5 text-base sm:text-lg max-w-3xl mx-auto">
-                    <p>신입 교육 및 업무 교육을 중심으로 강의를 해왔습니다.</p>
-                    <p>변화하는 시대에 맞춰, AI와 자동화 도구를 적극 활용하여 업무의 효율을 높이는 방식을 적용하려 노력합니다.</p>
-                    <p>영상 교육 콘텐츠 제작 역량을 갖추고 있으며, CS 강사 1급 자격증을 소지하고 있습니다.</p>
-                    <p>현재 홈페이지는 HTML과 JavaScript를 이용하여 직접 제작하였습니다.</p>
-                  </div>
-                  <p class="text-slate-500 mt-10 text-base sm:text-lg">현실에 안주하기보다 끊임없는 도전과 노력으로 항상 발전하는 사람이 되고 싶습니다.</p>
-                </div>
-              </section>
+      const openInNewTab = () => {
+        window.open(media.url, '_blank');
+      };
 
-              <!-- 주요 활동 -->
-              <section class="py-12 sm:py-16">
-                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                  <h2 class="text-3xl font-bold mb-12 text-center text-cyan-300">주요 활동</h2>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
-                    <div class="bg-slate-800/40 border border-slate-700 rounded-lg p-6">
-                      <h3 class="text-2xl font-semibold mb-4 text-cyan-300">진행 업무</h3>
-                      <div class="w-full h-px bg-cyan-400/50 mb-6"></div>
-                      <ul class="space-y-2">
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>신입 사원 업무 교육</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>기존 사원 업무 교육</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>온라인/오프라인 강의</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>CS 교육 기획 및 진행</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>영상 교육 제작</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>개인정보 보호 교육 기획 및 진행</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>간단한 프로그램 개발</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>상담 모니터링 진행 및 분석 보고</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>프로모션 기획 및 진행</li>
-                      </ul>
-                    </div>
-
-                    <div class="bg-slate-800/40 border border-slate-700 rounded-lg p-6">
-                      <h3 class="text-2xl font-semibold mb-4 text-cyan-300">이용 가능 툴</h3>
-                      <div class="w-full h-px bg-cyan-400/50 mb-6"></div>
-                      <ul class="space-y-2">
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>Microsoft Excel</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>Microsoft PowerPoint</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>Teams</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>Zoom</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>Premiere Pro</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>Aftereffect</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>Chat GPT / Python / Notion</li>
-                        <li class="text-slate-300"><span class="text-cyan-400 mr-2">•</span>다양한 AI 툴</li>
-                      </ul>
-                    </div>
-                  </div>
-                </div>
-              </section>
-
-              <!-- 연락처 -->
-              <section class="py-16 border-t border-slate-700">
-                <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-                  <h2 class="text-2xl font-bold mb-8 text-center text-cyan-300">연락처</h2>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
-                    <div class="bg-slate-800/40 border border-slate-700 rounded-lg p-6 text-center">
-                      <p class="text-slate-400 text-sm mb-2">이메일</p>
-                      <p class="text-lg font-semibold text-cyan-300">jiyoung1013@gmail.com</p>
-                    </div>
-                    <div class="bg-slate-800/40 border border-slate-700 rounded-lg p-6 text-center">
-                      <p class="text-slate-400 text-sm mb-2">전화</p>
-                      <p class="text-lg font-semibold text-cyan-300">010-4007-1417</p>
-                    </div>
-                  </div>
-                  <div class="text-center mt-12 text-slate-400 text-sm border-t border-slate-700 pt-8">
-                    <p>© 2025 Jiyoung - All rights reserved</p>
-                  </div>
-                </div>
-              </section>
-            </main>
-          </div>
-
-          <!-- 음악 URL 변경 모달 -->
-          <div id="music-url-modal" style="display: none;" class="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-            <div class="w-full max-w-md">
-              <div class="bg-slate-800 rounded-xl shadow-2xl p-8 border border-slate-700 relative">
-                <button id="close-modal" class="absolute top-4 right-4 text-slate-400 hover:text-white transition text-2xl">×</button>
-                
-                <h2 class="text-2xl font-bold mb-2 text-white">음악 URL 변경</h2>
-                <p class="text-slate-400 mb-6">GitHub의 Raw URL을 입력하세요</p>
-                
-                <div class="space-y-4">
-                  <textarea 
-                    id="music-url-input"
-                    class="w-full bg-slate-700 border border-slate-600 rounded-lg p-3 text-white text-xs h-24 font-mono overflow-auto"
-                    placeholder="https://raw.githubusercontent.com/..."
-                  ></textarea>
-                  
-                  <button id="save-url-btn" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg transition">
-                    💾 URL 저장
-                  </button>
-                </div>
+      return (
+        <div className="bg-slate-800 rounded-lg overflow-hidden shadow-lg border border-slate-700">
+          {mediaType === 'youtube' && embedUrl && (
+            <div className="aspect-video bg-slate-900">
+              <iframe width="100%" height="100%" src={embedUrl} title={media.title} frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="w-full h-full" />
+            </div>
+          )}
+          
+          {mediaType === 'figma' && embedUrl && (
+            <div 
+              className="aspect-video bg-slate-900 overflow-hidden relative group cursor-pointer"
+              onClick={openInNewTab}
+              title="클릭하여 Figma에서 열기"
+            >
+              <iframe 
+                className="w-full h-full" 
+                src={embedUrl}
+                allowFullScreen
+                style={{pointerEvents: 'none'}}
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-white text-sm bg-black/50 px-3 py-2 rounded">전체보기</span>
               </div>
             </div>
+          )}
+
+          {mediaType === 'website' && embedUrl && (
+            <div 
+              className="aspect-video bg-slate-900 overflow-hidden relative group cursor-pointer"
+              onClick={openInNewTab}
+              title="클릭하여 웹사이트에서 열기"
+            >
+              <iframe 
+                className="w-full h-full scale-50 origin-top-left" 
+                src={embedUrl}
+                style={{width: '200%', height: '200%', pointerEvents: 'none'}}
+              />
+              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-white text-sm bg-black/50 px-3 py-2 rounded">전체보기</span>
+              </div>
+            </div>
+          )}
+
+          {mediaType === 'unknown' && (
+            <div className="aspect-video bg-slate-900 flex items-center justify-center">
+              <div className="text-center">
+                <div className="text-4xl mb-4">❓</div>
+                <p className="text-slate-400 text-sm">지원하지 않는 형식</p>
+              </div>
+            </div>
+          )}
+          
+          <div className="p-4">
+            <div className="flex justify-between items-start gap-4">
+              <div className="flex-grow">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="text-lg">{getMediaIcon()}</span>
+                  <span className="text-xs text-slate-400 bg-slate-700 px-2 py-1 rounded">{getMediaLabel()}</span>
+                </div>
+                <h3 className="font-semibold text-white mb-2">{media.title}</h3>
+              </div>
+              {isLoggedIn && (
+                <button onClick={() => onDelete(media.id)} className="flex items-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 px-3 py-2 rounded text-sm transition text-nowrap flex-shrink-0">
+                  <i data-lucide="trash-2" style={{width: 16, height: 16}}></i> 삭제
+                </button>
+              )}
+            </div>
           </div>
-        `;
-
-        this.attachEventListeners();
-        this.updateMusicButton();
-      },
-
-      attachEventListeners() {
-        // 음소거 토글 버튼
-        const muteToggleBtn = document.getElementById('mute-toggle');
-        if (muteToggleBtn) {
-          muteToggleBtn.addEventListener('click', () => {
-            AudioManager.toggleMute();
-          });
-        }
-
-        // 음량 슬라이더
-        const volumeSlider = document.getElementById('volume-slider');
-        if (volumeSlider) {
-          volumeSlider.addEventListener('change', (e) => {
-            AudioManager.setVolume(e.target.value);
-            // 음량을 조절하면 자동으로 음소거 해제
-            if (AudioManager.isMuted && AudioManager.currentVolume > 0) {
-              AudioManager.isMuted = false;
-              AudioManager.element.muted = false;
-              localStorage.setItem('musicMuted', 'false');
-            }
-            this.updateMusicButton();
-          });
-          volumeSlider.addEventListener('input', (e) => {
-            AudioManager.setVolume(e.target.value);
-            if (AudioManager.isMuted && AudioManager.currentVolume > 0) {
-              AudioManager.isMuted = false;
-              AudioManager.element.muted = false;
-              localStorage.setItem('musicMuted', 'false');
-            }
-            this.updateMusicButton();
-          });
-        }
-
-        const loginBtn = document.getElementById('login-btn');
-        if (loginBtn) {
-          loginBtn.addEventListener('click', () => this.showLogin());
-        }
-
-        const logoutBtn = document.getElementById('logout-btn');
-        if (logoutBtn) {
-          logoutBtn.addEventListener('click', () => this.logout());
-        }
-
-        const musicUrlBtn = document.getElementById('music-url-btn');
-        if (musicUrlBtn) {
-          musicUrlBtn.addEventListener('click', () => this.showMusicUrlModal());
-        }
-
-        const closeModalBtn = document.getElementById('close-modal');
-        if (closeModalBtn) {
-          closeModalBtn.addEventListener('click', () => this.hideMusicUrlModal());
-        }
-
-        const saveUrlBtn = document.getElementById('save-url-btn');
-        if (saveUrlBtn) {
-          saveUrlBtn.addEventListener('click', () => this.saveMusicUrl());
-        }
-      },
-
-      updateMusicButton() {
-        const btn = document.getElementById('mute-toggle');
-        if (btn) {
-          btn.textContent = AudioManager.getMusicIcon();
-        }
-      },
-
-      showLogin() {
-        const password = prompt('🔐 비밀번호를 입력하세요:');
-        if (password === 'wjdwldud2025') {
-          this.isLoggedIn = true;
-          this.render();
-          alert('✅ 관리자로 로그인되었습니다!');
-        } else if (password !== null) {
-          alert('❌ 비밀번호가 틀렸습니다.');
-        }
-      },
-
-      logout() {
-        this.isLoggedIn = false;
-        this.render();
-      },
-
-      showMusicUrlModal() {
-        const modal = document.getElementById('music-url-modal');
-        if (modal) {
-          modal.style.display = 'flex';
-          const urlInput = document.getElementById('music-url-input');
-          urlInput.value = AudioManager.GITHUB_MUSIC_URL;
-        }
-      },
-
-      hideMusicUrlModal() {
-        const modal = document.getElementById('music-url-modal');
-        if (modal) {
-          modal.style.display = 'none';
-        }
-      },
-
-      saveMusicUrl() {
-        const urlInput = document.getElementById('music-url-input');
-        const newUrl = urlInput.value.trim();
-
-        if (!newUrl) {
-          alert('URL을 입력해주세요.');
-          return;
-        }
-
-        if (!newUrl.startsWith('https://')) {
-          alert('https://로 시작하는 유효한 URL을 입력해주세요.');
-          return;
-        }
-
-        AudioManager.GITHUB_MUSIC_URL = newUrl;
-        AudioManager.element.src = newUrl;
-        localStorage.setItem('musicUrl', newUrl);
-
-        alert('✅ 음악 URL이 변경되었습니다!');
-        this.hideMusicUrlModal();
-      }
+        </div>
+      );
     };
 
-    // 앱 초기화
-    document.addEventListener('DOMContentLoaded', () => {
-      console.log('🚀 포트폴리오 앱 시작...');
-      console.log('🔇 음소거 상태에서 자동재생 시도 중...');
+    const ListItem = ({ item, onUpdate, onDelete, isLoggedIn }) => {
+        const [isEditing, setIsEditing] = useState(false);
+        const [text, setText] = useState(item.text);
+
+        const handleSave = () => {
+            onUpdate(item.id, text);
+            setIsEditing(false);
+        };
+
+        return (
+            <li className="flex items-center justify-between py-2">
+                {isEditing ? (
+                    <input 
+                        type="text"
+                        value={text}
+                        onChange={(e) => setText(e.target.value)}
+                        className="w-full bg-slate-700 border border-slate-600 rounded px-2 py-1 text-white"
+                        autoFocus
+                    />
+                ) : (
+                    <span className="text-slate-300 flex-grow whitespace-normal">
+                        <span className="text-cyan-400 mr-2">•</span>{item.text}
+                    </span>
+                )}
+                {isLoggedIn && (
+                    <div className="flex gap-2 ml-4">
+                        {isEditing ? (
+                            <>
+                                <button onClick={handleSave} className="text-green-400 hover:text-green-300 transition"><i data-lucide="save" style={{width: 18, height: 18}}></i></button>
+                                <button onClick={() => setIsEditing(false)} className="text-slate-400 hover:text-slate-300 transition"><i data-lucide="x" style={{width: 18, height: 18}}></i></button>
+                            </>
+                        ) : (
+                            <>
+                                <button onClick={() => setIsEditing(true)} className="text-blue-400 hover:text-blue-300 transition"><i data-lucide="edit-2" style={{width: 18, height: 18}}></i></button>
+                                <button onClick={() => onDelete(item.id)} className="text-red-400 hover:text-red-300 transition"><i data-lucide="trash-2" style={{width: 18, height: 18}}></i></button>
+                            </>
+                        )}
+                    </div>
+                )}
+            </li>
+        )
+    }
+
+    // ============ 메인 컴포넌트 ============
+    const PortfolioSite = () => {
+      const audioRef = useRef(null);
+      const fileInputRef = useRef(null);
+
+      // localStorage 헬퍼 함수
+      const getStorageData = (key, defaultValue) => {
+        try {
+          const item = localStorage.getItem(key);
+          return item ? JSON.parse(item) : defaultValue;
+        } catch (e) {
+          console.error('Storage read error:', e);
+          return defaultValue;
+        }
+      };
+
+      const setStorageData = (key, value) => {
+        try {
+          localStorage.setItem(key, JSON.stringify(value));
+        } catch (e) {
+          console.error('Storage write error:', e);
+        }
+      };
+
+      // 상태 초기화
+      const [mainVideoUrl, setMainVideoUrl] = useState(
+        getStorageData('mainVideoUrl', convertToEmbedUrl('https://youtu.be/gqos6G0MnzM', true, true, true))
+      );
+
+      const [workItems, setWorkItems] = useState(
+        getStorageData('workItems', [
+          { id: 1, text: '신입 사원 업무 교육' },
+          { id: 2, text: '기존 사원 업무 교육' },
+          { id: 3, text: '온라인/오프라인 강의' },
+          { id: 4, text: 'CS 교육 기획 및 진행' },
+          { id: 5, text: '영상 교육 제작' },
+          { id: 6, text: '개인정보 보호 교육 기획 및 진행' },
+          { id: 7, text: '간단한 프로그램 개발' },
+          { id: 8, text: '상담 모니터링 진행 및 분석 보고' },
+          { id: 9, text: '프로모션 기획 및 진행' },
+        ])
+      );
+
+      const [toolItems, setToolItems] = useState(
+        getStorageData('toolItems', [
+          { id: 1, text: 'Microsoft Excel' },
+          { id: 2, text: 'Microsoft PowerPoint' },
+          { id: 3, text: 'Teams' },
+          { id: 4, text: 'Zoom' },
+          { id: 5, text: 'Premiere Pro' },
+          { id: 6, text: 'Aftereffect' },
+          { id: 7, text: 'Chat GPT / Python / Notion' },
+          { id: 8, text: '다양한 AI 툴' },
+        ])
+      );
+
+      const [portfolioMedias, setPortfolioMedias] = useState(
+        getStorageData('portfolioMedias', [
+          { id: 1, title: '개인정보 유용 사례 교육', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+          { id: 2, title: '개인정보 유출 사례2', url: 'https://youtu.be/jNQXAC9IVRw' }
+        ])
+      );
+
+      const [isLoggedIn, setIsLoggedIn] = useState(false);
+      const [showLoginModal, setShowLoginModal] = useState(false);
+      const [passwordInput, setPasswordInput] = useState('');
+      const [editingMainVideoUrl, setEditingMainVideoUrl] = useState('');
+      const [newWorkItem, setNewWorkItem] = useState('');
+      const [newToolItem, setNewToolItem] = useState('');
+      const [newMediaTitle, setNewMediaTitle] = useState('');
+      const [newMediaUrl, setNewMediaUrl] = useState('');
       
-      // localStorage에서 저장된 URL 불러오기
-      const savedUrl = localStorage.getItem('musicUrl');
-      if (savedUrl) {
-        AudioManager.GITHUB_MUSIC_URL = savedUrl;
-      }
+      // GitHub 배경음악 URL (변경 가능)
+      const GITHUB_MUSIC_URL = 'https://raw.githubusercontent.com/aisiae/testproduct/main/music/%ED%96%87%EC%82%B4%EC%9D%B4%20%EB%93%9C%EB%A6%AC%EC%9A%B0%EB%8A%94%20%EB%93%AF%ED%95%9C%20%EC%8B%9C%EC%9E%91%EC%9D%84%20%EC%95%8C%EB%A6%AC%EB%8A%94%20%EC%A1%B0%EC%9A%A9%ED%95%98%EC%A7%80%EB%A7%8C%20%EB%B0%9D%EC%9D%80%20%EB%B0%B0%EA%B2%BD.mp3';
+      const DEFAULT_MUSIC_FILENAME = '햇살이 드리우는 듯한 시작을 알리는 조용하지만 밝은 배경.mp3';
       
-      AudioManager.init();
-      UI.render();
-    });
+      const [backgroundMusicUrl, setBackgroundMusicUrl] = useState(GITHUB_MUSIC_URL);
+      const [musicFileName, setMusicFileName] = useState(DEFAULT_MUSIC_FILENAME);
+      const [isPlaying, setIsPlaying] = useState(false);
+      const [volume, setVolume] = useState(0.3);
+      const [isMuted, setIsMuted] = useState(false);
+
+      const ADMIN_PASSWORD = 'wjdwldud2025';
+      const email = 'jiyoung1013@gmail.com';
+      const phone = '010-4007-1417';
+
+      // ============ localStorage 동기화 ============
+      useEffect(() => {
+        setStorageData('mainVideoUrl', mainVideoUrl);
+      }, [mainVideoUrl]);
+
+      useEffect(() => {
+        setStorageData('workItems', workItems);
+      }, [workItems]);
+
+      useEffect(() => {
+        setStorageData('toolItems', toolItems);
+      }, [toolItems]);
+
+      useEffect(() => {
+        setStorageData('portfolioMedias', portfolioMedias);
+      }, [portfolioMedias]);
+
+      useEffect(() => {
+        lucide.createIcons();
+      }, []);
+
+      // ============ 배경음악 자동재생 ============
+      useEffect(() => {
+        if (audioRef.current) {
+          audioRef.current.volume = volume;
+          audioRef.current.muted = isMuted;
+          
+          // 자동재생 시도
+          const playPromise = audioRef.current.play();
+          if (playPromise !== undefined) {
+            playPromise
+              .then(() => {
+                setIsPlaying(true);
+                console.log('✅ 자동재생 성공');
+              })
+              .catch((e) => {
+                console.log('⚠️ 자동재생 실패:', e.name);
+                setIsPlaying(false);
+              });
+          }
+        }
+      }, [backgroundMusicUrl]);
+
+      // ============ 핸들러 함수들 ============
+      const handleLogin = (e) => {
+        e.preventDefault();
+        if (passwordInput === ADMIN_PASSWORD) {
+          setIsLoggedIn(true);
+          setShowLoginModal(false);
+          setPasswordInput('');
+        } else {
+          alert('비밀번호가 틀렸습니다.');
+          setPasswordInput('');
+        }
+      };
+
+      const handleLogout = () => {
+        setIsLoggedIn(false);
+      };
+
+      const handleAddWorkItem = () => {
+        if (newWorkItem.trim()) {
+          const newId = Math.max(0, ...workItems.map(i => i.id)) + 1;
+          setWorkItems([...workItems, { id: newId, text: newWorkItem }]);
+          setNewWorkItem('');
+        }
+      };
+
+      const handleUpdateWorkItem = (id, newText) => {
+        setWorkItems(workItems.map(item => item.id === id ? { ...item, text: newText } : item));
+      };
+
+      const handleDeleteWorkItem = (id) => {
+        if (window.confirm('정말 삭제하시겠습니까?')) {
+          setWorkItems(workItems.filter(item => item.id !== id));
+        }
+      };
+
+      const handleAddToolItem = () => {
+        if (newToolItem.trim()) {
+          const newId = Math.max(0, ...toolItems.map(i => i.id)) + 1;
+          setToolItems([...toolItems, { id: newId, text: newToolItem }]);
+          setNewToolItem('');
+        }
+      };
+
+      const handleUpdateToolItem = (id, newText) => {
+        setToolItems(toolItems.map(item => item.id === id ? { ...item, text: newText } : item));
+      };
+
+      const handleDeleteToolItem = (id) => {
+        if (window.confirm('정말 삭제하시겠습니까?')) {
+          setToolItems(toolItems.filter(item => item.id !== id));
+        }
+      };
+
+      const handleAddPortfolioMedia = () => {
+        const mediaType = detectMediaType(newMediaUrl);
+        if (newMediaTitle.trim() && newMediaUrl.trim() && mediaType !== 'unknown') {
+          setPortfolioMedias([...portfolioMedias, {
+            id: Math.max(...portfolioMedias.map(m => m.id), 0) + 1,
+            title: newMediaTitle,
+            url: newMediaUrl
+          }]);
+          setNewMediaTitle('');
+          setNewMediaUrl('');
+        } else {
+          alert('유효한 URL을 입력해주세요.\n\n지원 형식:\n- YouTube: youtube.com 또는 youtu.be\n- Figma: figma.com 공유 링크\n- 웹사이트: https://로 시작하는 URL');
+        }
+      };
+
+      const handleDeletePortfolioMedia = (id) => {
+        if (window.confirm('정말 삭제하시겠습니까?')) {
+          setPortfolioMedias(portfolioMedias.filter(m => m.id !== id));
+        }
+      };
+
+      const handleUpdateMainVideo = () => {
+        const embedUrl = convertToEmbedUrl(editingMainVideoUrl, true, true, true);
+        if (embedUrl) {
+          setMainVideoUrl(embedUrl);
+          setEditingMainVideoUrl('');
+        } else {
+          alert("유효한 YouTube 영상 주소를 입력해주세요.");
+        }
+      };
+
+      const handleMusicUpload = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+          const validTypes = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4'];
+          if (validTypes.includes(file.type)) {
+            const url = URL.createObjectURL(file);
+            setBackgroundMusicUrl(url);
+            setMusicFileName(file.name);
+            setIsPlaying(false);
+          } else {
+            alert('MP3, WAV, OGG, M4A 형식의 파일만 업로드 가능합니다.');
+          }
+        }
+      };
+
+      const toggleMusicPlayback = () => {
+        if (audioRef.current) {
+          if (isPlaying) {
+            audioRef.current.pause();
+            setIsPlaying(false);
+          } else {
+            audioRef.current.play();
+            setIsPlaying(true);
+          }
+        }
+      };
+
+      const toggleMute = () => {
+        setIsMuted(!isMuted);
+        if (audioRef.current) {
+          audioRef.current.muted = !isMuted;
+          if (!isMuted) {
+            audioRef.current.play();
+            setIsPlaying(true);
+          }
+        }
+      };
+
+      const handleVolumeChange = (e) => {
+        const newVolume = parseFloat(e.target.value);
+        setVolume(newVolume);
+        if (audioRef.current) {
+          audioRef.current.volume = newVolume;
+          // 음량을 조절하면 자동으로 음소거 해제
+          if (isMuted && newVolume > 0) {
+            setIsMuted(false);
+            audioRef.current.muted = false;
+            audioRef.current.play();
+            setIsPlaying(true);
+          }
+        }
+      };
+
+      const deleteMusicFile = () => {
+        if (window.confirm('배경음악을 삭제하시겠습니까?')) {
+          if (audioRef.current) {
+            audioRef.current.pause();
+          }
+          setBackgroundMusicUrl(null);
+          setMusicFileName('');
+          setIsPlaying(false);
+          if (fileInputRef.current) {
+            fileInputRef.current.value = '';
+          }
+        }
+      };
+
+      const getMusicIcon = () => {
+        if (!backgroundMusicUrl) return '❌';
+        if (isMuted) return '🔇';
+        if (volume === 0) return '🔇';
+        if (volume < 0.33) return '🔈';
+        if (volume < 0.67) return '🔉';
+        return '🔊';
+      };
+
+      // ============ 렌더링 ============
+      return (
+        <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
+          {backgroundMusicUrl && <audio ref={audioRef} src={backgroundMusicUrl} loop />}
+
+          {showLoginModal && (
+             <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+                <div className="w-full max-w-md">
+                <div className="bg-slate-800 rounded-xl shadow-2xl p-8 border border-slate-700 relative">
+                    <button onClick={() => setShowLoginModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white transition"><i data-lucide="x"></i></button>
+                    <h1 className="text-2xl font-bold text-center mb-2 text-white">관리자 로그인</h1>
+                    <p className="text-center text-slate-400 mb-8">Administrator Access</p>
+                    <form onSubmit={handleLogin} className="space-y-4">
+                    <div>
+                        <label className="block text-slate-300 text-sm font-medium mb-2">비밀번호</label>
+                        <input
+                        type="password"
+                        value={passwordInput}
+                        onChange={(e) => setPasswordInput(e.target.value)}
+                        placeholder="비밀번호를 입력하세요"
+                        autoComplete="off"
+                        className="w-full px-4 py-3 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                        />
+                    </div>
+                    <button type="submit" className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 text-white font-bold py-3 px-4 rounded-lg transition duration-300">
+                        로그인
+                    </button>
+                    </form>
+                </div>
+                </div>
+            </div>
+          )}
+
+          <nav className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur border-b border-slate-700/50">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
+              <h1 className="text-2xl font-bold text-cyan-400">J-PROJECT</h1>
+              <div className="flex items-center gap-4">
+                {backgroundMusicUrl && (
+                  <div className="flex items-center gap-3 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2">
+                    <button 
+                      onClick={toggleMute}
+                      className="text-cyan-400 hover:text-cyan-300 transition text-lg"
+                      title={isMuted ? '음소거 해제' : '음소거'}
+                    >
+                      {getMusicIcon()}
+                    </button>
+                    <input 
+                      type="range" 
+                      min="0" 
+                      max="1" 
+                      step="0.1" 
+                      value={volume}
+                      onChange={handleVolumeChange}
+                      className="w-20 h-1 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-cyan-400"
+                    />
+                  </div>
+                )}
+                {!isLoggedIn ? (
+                  <button onClick={() => setShowLoginModal(true)} className="flex items-center gap-2 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-400 px-4 py-2 rounded-lg transition">
+                      <i data-lucide="log-in" style={{width: 18, height: 18}}></i>
+                      <span className="text-sm">관리자 로그인</span>
+                  </button>
+                ) : (
+                  <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 px-4 py-2 rounded-lg transition">
+                      <i data-lucide="log-out" style={{width: 18, height: 18}}></i>
+                      <span className="text-sm">로그아웃</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          </nav>
+
+          <main>
+            <section className="py-12 sm:py-16">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h2 className="text-2xl font-bold mb-8 text-center text-cyan-300">메인 영상</h2>
+                <div className="aspect-video bg-slate-800 rounded-lg overflow-hidden shadow-lg border border-slate-700 mb-8">
+                    {mainVideoUrl && <iframe width="100%" height="100%" src={mainVideoUrl} title="Main Video" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen className="w-full h-full" />}
+                </div>
+                {isLoggedIn && (
+                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 max-w-3xl mx-auto">
+                        <h3 className="text-lg font-semibold mb-4">메인 영상 URL 변경</h3>
+                        <div className="flex flex-col sm:flex-row items-center gap-2">
+                            <input
+                            type="text"
+                            placeholder="YouTube 영상 주소 (예: youtu.be/...)"
+                            value={editingMainVideoUrl}
+                            onChange={(e) => setEditingMainVideoUrl(e.target.value)}
+                            className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500"
+                            />
+                            <button onClick={handleUpdateMainVideo} className="bg-green-600 hover:bg-green-700 px-5 py-2 rounded-lg font-medium transition text-nowrap w-full sm:w-auto">저장</button>
+                        </div>
+                    </div>
+                )}
+                </div>
+            </section>
+            
+            <section className="py-12 sm:py-16 text-center">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                    <h2 className="text-3xl font-bold mb-4 text-cyan-200">안녕하세요! 교육의 효율을 디자인하는</h2>
+                    <h2 className="text-3xl font-bold mb-3 text-cyan-200">강사 정지영입니다.</h2>
+                    <div className="text-slate-200 space-y-5 text-base sm:text-lg max-w-3xl mx-auto">
+                        <p>신입 교육 및 업무 교육을 중심으로 강의를 해왔습니다.</p>
+                        <p>변화하는 시대에 맞춰, AI와 자동화 도구를 적극 활용하여 업무의 효율을 높이는 방식을 적용하려 노력합니다.</p>
+                        <p>영상 교육 콘텐츠 제작 역량을 갖추고 있으며, CS 강사 1급 자격증을 소지하고 있습니다.</p>
+                        <p>현재 홈페이지는 HTML과 JavaScript를 이용하여 직접 제작하였습니다.</p>
+                    </div>
+                    <p className="text-slate-500 mt-10 text-base sm:text-lg">현실에 안주하기보다 끊임없는 도전과 노력으로 항상 발전하는 사람이 되고 싶습니다.</p>
+                </div>
+            </section>
+
+            <section className="py-12 sm:py-16">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h2 className="text-3xl font-bold mb-12 text-center text-cyan-300">주요 활동</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-6">
+                        <h3 className="text-2xl font-semibold mb-4 text-cyan-300">진행 업무</h3>
+                        <div className="w-full h-px bg-cyan-400/50 mb-6"></div>
+                        <ul className="space-y-2 mb-6">
+                            {workItems.map(item => (
+                                <ListItem key={item.id} item={item} onUpdate={handleUpdateWorkItem} onDelete={handleDeleteWorkItem} isLoggedIn={isLoggedIn} />
+                            ))}
+                        </ul>
+                        {isLoggedIn && (
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="새 업무 추가"
+                                    value={newWorkItem}
+                                    onChange={(e) => setNewWorkItem(e.target.value)}
+                                    className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
+                                />
+                                <button onClick={handleAddWorkItem} className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded transition text-nowrap">추가</button>
+                            </div>
+                        )}
+                    </div>
+
+                    <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-6">
+                        <h3 className="text-2xl font-semibold mb-4 text-cyan-300">이용 가능 툴</h3>
+                        <div className="w-full h-px bg-cyan-400/50 mb-6"></div>
+                        <ul className="space-y-2 mb-6">
+                            {toolItems.map(item => (
+                                <ListItem key={item.id} item={item} onUpdate={handleUpdateToolItem} onDelete={handleDeleteToolItem} isLoggedIn={isLoggedIn} />
+                            ))}
+                        </ul>
+                        {isLoggedIn && (
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    placeholder="새 툴 추가"
+                                    value={newToolItem}
+                                    onChange={(e) => setNewToolItem(e.target.value)}
+                                    className="w-full bg-slate-700 border border-slate-600 rounded px-3 py-2 text-white"
+                                />
+                                <button onClick={handleAddToolItem} className="bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded transition text-nowrap">추가</button>
+                            </div>
+                        )}
+                    </div>
+                </div>
+                </div>
+            </section>
+
+            <section className="py-12 sm:py-16 bg-slate-900/50">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h2 className="text-3xl font-bold mb-12 text-center text-cyan-300">포트폴리오 미디어</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+                    {portfolioMedias.map((media) => (
+                      <MediaCard key={media.id} media={media} onDelete={handleDeletePortfolioMedia} isLoggedIn={isLoggedIn} />
+                    ))}
+                </div>
+
+                {isLoggedIn && (
+                    <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 max-w-3xl mx-auto">
+                        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2"><i data-lucide="plus" style={{width: 20, height: 20}}></i> 포트폴리오 미디어 추가</h3>
+                        <div className="space-y-3">
+                        <input type="text" placeholder="제목" value={newMediaTitle} onChange={(e) => setNewMediaTitle(e.target.value)} className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                        <div>
+                          <input type="text" placeholder="링크 (YouTube, Figma, 웹사이트)" value={newMediaUrl} onChange={(e) => setNewMediaUrl(e.target.value)} className="w-full px-4 py-2 bg-slate-700 border border-slate-600 rounded-lg text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-cyan-500" />
+                          <p className="text-xs text-slate-400 mt-2">지원: YouTube 링크, Figma 공유 링크, 웹사이트 URL</p>
+                        </div>
+                        <button onClick={handleAddPortfolioMedia} className="bg-cyan-600 hover:bg-cyan-700 px-4 py-2 rounded-lg font-medium transition">미디어 추가</button>
+                        </div>
+                    </div>
+                )}
+                </div>
+            </section>
+
+            {isLoggedIn && (
+              <section className="py-12 sm:py-16 bg-slate-900/50">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                  <h2 className="text-3xl font-bold mb-8 text-center text-cyan-300">배경음악 설정</h2>
+                  <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 max-w-2xl mx-auto">
+                    <div className="space-y-4">
+                      <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-3 mb-4">
+                        <p className="text-sm text-slate-300">💡 팁: 기본 배경음악은 GitHub에서 자동으로 로드됩니다. 새로운 파일을 업로드하면 현재 세션동안 재생됩니다.</p>
+                      </div>
+                      <div>
+                        <label className="block text-slate-300 text-sm font-medium mb-3">음악 파일 업로드 (선택사항)</label>
+                        <div className="flex items-center gap-3">
+                          <input 
+                            ref={fileInputRef}
+                            type="file" 
+                            accept="audio/*"
+                            onChange={handleMusicUpload}
+                            className="hidden"
+                            id="music-upload"
+                          />
+                          <label htmlFor="music-upload" className="flex-1 bg-cyan-600 hover:bg-cyan-700 text-white px-4 py-2 rounded-lg font-medium transition cursor-pointer text-center">
+                            파일 선택
+                          </label>
+                          {musicFileName && (
+                            <span className="text-slate-300 text-sm truncate flex-1">{musicFileName}</span>
+                          )}
+                        </div>
+                      </div>
+                      {musicFileName && musicFileName !== DEFAULT_MUSIC_FILENAME && (
+                        <div className="flex items-center justify-between bg-slate-700/50 border border-slate-600 rounded-lg p-4">
+                          <div>
+                            <p className="text-sm text-slate-400">현재 음악</p>
+                            <p className="text-white font-medium">{musicFileName}</p>
+                          </div>
+                          <button 
+                            onClick={deleteMusicFile}
+                            className="flex items-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 px-3 py-2 rounded transition text-sm"
+                          >
+                            <i data-lucide="trash-2" style={{width: 16, height: 16}}></i> 삭제
+                          </button>
+                        </div>
+                      )}
+                      <p className="text-xs text-slate-400">지원 형식: MP3, WAV, OGG, M4A</p>
+                    </div>
+                  </div>
+                </div>
+              </section>
+            )}
+
+            <section className="py-16 border-t border-slate-700">
+                <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+                <h2 className="text-2xl font-bold mb-8 text-center text-cyan-300">연락처</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-2xl mx-auto">
+                    <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-6 text-center"><p className="text-slate-400 text-sm mb-2">이메일</p><p className="text-lg font-semibold text-cyan-300">{email}</p></div>
+                    <div className="bg-slate-800/40 border border-slate-700 rounded-lg p-6 text-center"><p className="text-slate-400 text-sm mb-2">전화</p><p className="text-lg font-semibold text-cyan-300">{phone}</p></div>
+                </div>
+                <div className="text-center mt-12 text-slate-400 text-sm border-t border-slate-700 pt-8"><p>© 2025 Jiyoung - All rights reserved</p></div>
+                </div>
+            </section>
+          </main>
+        </div>
+      );
+    };
+
+    ReactDOM.render(<PortfolioSite />, document.getElementById('root'));
   </script>
 </body>
 </html>
