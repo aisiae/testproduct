@@ -224,7 +224,7 @@
         )
     }
 
-    // ===== 배경음악 전역 매니저 (React 외부에서 관리) =====
+    // ===== 배경음악 전역 매니저 =====
     const MusicManager = {
       audio: null,
       isInitialized: false,
@@ -237,7 +237,6 @@
         this.audio.loop = true;
         this.audio.preload = 'auto';
         this.audio.style.display = 'none';
-        this.audio.crossOrigin = 'anonymous';
         
         document.body.appendChild(this.audio);
         
@@ -245,12 +244,21 @@
         return this.audio;
       },
 
-      // 음악 파일 설정
-      setMusicFile: function(fileUrl) {
+      // Blob URL을 사용하여 음악 파일 설정 (CORS 문제 해결)
+      setMusicFile: function(blob, fileName) {
         const audio = this.createAudioElement();
-        audio.src = fileUrl;
+        
+        // 기존 Blob URL 해제
+        if (audio.src && audio.src.startsWith('blob:')) {
+          URL.revokeObjectURL(audio.src);
+        }
+        
+        // 새로운 Blob URL 생성
+        const blobUrl = URL.createObjectURL(blob);
+        audio.src = blobUrl;
         audio.load();
-        console.log('🎵 음악 파일 설정:', fileUrl);
+        
+        console.log('🎵 음악 파일 설정:', fileName);
       },
 
       init: function() {
@@ -261,19 +269,12 @@
         
         // localStorage에서 설정 복원
         const savedVolume = localStorage.getItem('musicVolume') || '30';
-        const savedMusicUrl = localStorage.getItem('musicFileUrl');
         const wasPlaying = localStorage.getItem('musicWasPlaying') === 'true';
         
         audio.volume = parseInt(savedVolume) / 100;
         
-        // 저장된 음악 파일이 있으면 설정
-        if (savedMusicUrl) {
-          audio.src = savedMusicUrl;
-          audio.load();
-        }
-        
-        // 사용자가 이전에 재생 중이었고 음악 파일이 있으면 자동 재생 시도
-        if (wasPlaying && savedMusicUrl) {
+        // 사용자가 이전에 재생 중이었으면 자동 재생 시도
+        if (wasPlaying && audio.src) {
           setTimeout(() => {
             const playPromise = audio.play();
             if (playPromise !== undefined) {
@@ -517,7 +518,7 @@
           }
       }
 
-      // 배경음악 파일 업로드 처리
+      // 배경음악 파일 업로드 처리 (수정: Blob URL 사용)
       const handleMusicFileUpload = (e) => {
         const file = e.target.files[0];
         if (file) {
@@ -533,26 +534,17 @@
             return;
           }
 
-          // FileReader를 사용하여 파일을 Data URL로 변환
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            const fileUrl = event.target.result;
-            
-            // 음악 파일 설정
-            MusicManager.setMusicFile(fileUrl);
-            
-            // localStorage에 저장
-            localStorage.setItem('musicFileUrl', fileUrl);
-            localStorage.setItem('musicFileName', file.name);
-            
-            setMusicFileName(file.name);
-            setShowMusicUploadModal(false);
-            
-            console.log('✅ 배경음악 업로드 완료:', file.name);
-            alert('배경음악이 업로드되었습니다!');
-          };
+          // Blob URL을 사용 (ArrayBuffer 대신)
+          MusicManager.setMusicFile(file, file.name);
           
-          reader.readAsArrayBuffer(file);
+          // localStorage에 파일명 저장 (Blob URL은 저장할 수 없으므로 파일명만 저장)
+          localStorage.setItem('musicFileName', file.name);
+          
+          setMusicFileName(file.name);
+          setShowMusicUploadModal(false);
+          
+          console.log('✅ 배경음악 업로드 완료:', file.name);
+          alert('배경음악이 업로드되었습니다! 🎵');
         }
       };
 
@@ -562,10 +554,12 @@
           const audio = MusicManager.audio;
           if (audio) {
             audio.pause();
+            if (audio.src && audio.src.startsWith('blob:')) {
+              URL.revokeObjectURL(audio.src);
+            }
             audio.src = '';
           }
           
-          localStorage.removeItem('musicFileUrl');
           localStorage.removeItem('musicFileName');
           localStorage.setItem('musicWasPlaying', 'false');
           
@@ -577,6 +571,7 @@
           }
           
           console.log('🗑️ 배경음악 삭제됨');
+          alert('배경음악이 삭제되었습니다.');
         }
       };
 
