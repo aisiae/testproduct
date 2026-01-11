@@ -16,6 +16,16 @@
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
 
+    // ========================================
+    // 🎵 GitHub Pages 음악 URL 설정
+    // ========================================
+    // 사용자명을 당신의 GitHub 사용자명으로 변경하세요
+    // 예: https://jiyoung1013.github.io/j-project-portfolio/music/background.mp3
+    // 
+    // 또는 음악 파일을 다른 곳(예: Dropbox, Google Drive 공개 링크)에 호스팅해도 됩니다
+    const MUSIC_URL = 'music/background.mp3';  // 상대 경로 (GitHub Pages일 때)
+    // const MUSIC_URL = 'https://your-username.github.io/j-project-portfolio/music/background.mp3';  // 절대 경로 사용 권장
+
     const convertToEmbedUrl = (url, autoplay = false, mute = false, loop = false) => {
       if (!url) return null;
       let videoId = null;
@@ -224,128 +234,12 @@
         )
     }
 
-    // ===== 배경음악 전역 매니저 =====
-    const MusicManager = {
-      audio: null,
-      isInitialized: false,
-
-      createAudioElement: function() {
-        if (this.audio) return this.audio;
-        
-        this.audio = document.createElement('audio');
-        this.audio.id = 'bg-music-player';
-        this.audio.loop = true;
-        this.audio.preload = 'auto';
-        this.audio.style.display = 'none';
-        
-        document.body.appendChild(this.audio);
-        
-        console.log('🎵 배경음악 플레이어 생성됨');
-        return this.audio;
-      },
-
-      // Blob URL을 사용하여 음악 파일 설정 (CORS 문제 해결)
-      setMusicFile: function(blob, fileName) {
-        const audio = this.createAudioElement();
-        
-        // 기존 Blob URL 해제
-        if (audio.src && audio.src.startsWith('blob:')) {
-          URL.revokeObjectURL(audio.src);
-        }
-        
-        // 새로운 Blob URL 생성
-        const blobUrl = URL.createObjectURL(blob);
-        audio.src = blobUrl;
-        audio.load();
-        
-        console.log('🎵 음악 파일 설정:', fileName);
-      },
-
-      init: function() {
-        if (this.isInitialized) return;
-        this.isInitialized = true;
-
-        const audio = this.createAudioElement();
-        
-        // localStorage에서 설정 복원
-        const savedVolume = localStorage.getItem('musicVolume') || '30';
-        const wasPlaying = localStorage.getItem('musicWasPlaying') === 'true';
-        
-        audio.volume = parseInt(savedVolume) / 100;
-        
-        // 사용자가 이전에 재생 중이었으면 자동 재생 시도
-        if (wasPlaying && audio.src) {
-          setTimeout(() => {
-            const playPromise = audio.play();
-            if (playPromise !== undefined) {
-              playPromise
-                .then(() => {
-                  console.log('✅ 배경음악 자동 재생 성공');
-                  localStorage.setItem('musicWasPlaying', 'true');
-                })
-                .catch(err => {
-                  console.log('⚠️ 자동 재생 차단됨 (브라우저 정책):', err.message);
-                  localStorage.setItem('musicWasPlaying', 'false');
-                });
-            }
-          }, 500);
-        }
-        
-        // 음악 재생 이벤트
-        audio.addEventListener('play', () => {
-          localStorage.setItem('musicWasPlaying', 'true');
-        });
-        
-        // 음악 일시정지 이벤트
-        audio.addEventListener('pause', () => {
-          localStorage.setItem('musicWasPlaying', 'false');
-        });
-      },
-
-      toggle: function() {
-        const audio = this.createAudioElement();
-        
-        if (!audio.src) {
-          alert('먼저 배경음악을 업로드해주세요.');
-          return;
-        }
-        
-        if (audio.paused) {
-          const playPromise = audio.play();
-          if (playPromise !== undefined) {
-            playPromise.catch(err => {
-              console.error('재생 실패:', err);
-            });
-          }
-        } else {
-          audio.pause();
-        }
-      },
-
-      setVolume: function(percent) {
-        const audio = this.createAudioElement();
-        const volume = Math.max(0, Math.min(100, percent)) / 100;
-        audio.volume = volume;
-        localStorage.setItem('musicVolume', percent);
-        
-        console.log(`🔊 음량: ${percent}%`);
-      },
-
-      isPlaying: function() {
-        if (!this.audio) return false;
-        return !this.audio.paused;
-      },
-
-      hasFile: function() {
-        if (!this.audio) return false;
-        return !!this.audio.src;
-      }
-    };
-
     const PortfolioSite = () => {
       useEffect(() => {
         lucide.createIcons();
       }, []);
+
+      const audioRef = useRef(null);
 
       const loadFromStorage = (key, defaultValue) => {
         try {
@@ -419,27 +313,39 @@
 
       // 음악 UI 상태
       const [musicIsPlaying, setMusicIsPlaying] = useState(false);
-      const [musicVolume, setMusicVolume] = useState(30);
-      const [musicFileName, setMusicFileName] = useState('');
-      const [showMusicUploadModal, setShowMusicUploadModal] = useState(false);
-      const fileInputRef = useRef(null);
+      const [musicVolume, setMusicVolume] = useState(() => 
+        parseInt(localStorage.getItem('musicVolume') || '30')
+      );
 
-      // 페이지 로드 시 음악 매니저 초기화
+      // 페이지 로드 시 음악 설정
       useEffect(() => {
-        MusicManager.init();
-        
-        // 저장된 파일명 복원
-        const savedFileName = localStorage.getItem('musicFileName');
-        if (savedFileName) {
-          setMusicFileName(savedFileName);
+        if (audioRef.current) {
+          audioRef.current.src = MUSIC_URL;
+          const savedVolume = parseInt(localStorage.getItem('musicVolume') || '30');
+          const wasPlaying = localStorage.getItem('musicWasPlaying') === 'true';
+          
+          audioRef.current.volume = savedVolume / 100;
+          
+          // 이전에 재생 중이었으면 자동 재생 시도
+          if (wasPlaying) {
+            setTimeout(() => {
+              audioRef.current.play().catch(e => {
+                console.log('자동재생 차단됨 (브라우저 정책):', e);
+                localStorage.setItem('musicWasPlaying', 'false');
+              });
+            }, 1000);
+          }
         }
+      }, []);
+
+      // 음악 상태 주기적 업데이트
+      useEffect(() => {
+        const interval = setInterval(() => {
+          if (audioRef.current) {
+            setMusicIsPlaying(!audioRef.current.paused);
+          }
+        }, 500);
         
-        // 음악 상태 업데이트 (UI 동기화용)
-        const updateMusicUI = () => {
-          setMusicIsPlaying(MusicManager.isPlaying());
-        };
-        
-        const interval = setInterval(updateMusicUI, 500);
         return () => clearInterval(interval);
       }, []);
 
@@ -518,79 +424,34 @@
           }
       }
 
-      // 배경음악 파일 업로드 처리 (수정: Blob URL 사용)
-      const handleMusicFileUpload = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-          const validTypes = ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/mp4', 'audio/webm'];
-          
-          if (!validTypes.includes(file.type)) {
-            alert('MP3, WAV, OGG, M4A, WebM 형식의 파일만 업로드 가능합니다.');
-            return;
-          }
-
-          if (file.size > 50 * 1024 * 1024) { // 50MB
-            alert('파일 크기가 50MB를 초과합니다.');
-            return;
-          }
-
-          // Blob URL을 사용 (ArrayBuffer 대신)
-          MusicManager.setMusicFile(file, file.name);
-          
-          // localStorage에 파일명 저장 (Blob URL은 저장할 수 없으므로 파일명만 저장)
-          localStorage.setItem('musicFileName', file.name);
-          
-          setMusicFileName(file.name);
-          setShowMusicUploadModal(false);
-          
-          console.log('✅ 배경음악 업로드 완료:', file.name);
-          alert('배경음악이 업로드되었습니다! 🎵');
-        }
-      };
-
-      // 배경음악 삭제
-      const handleMusicFileDelete = () => {
-        if (window.confirm('배경음악을 삭제하시겠습니까?')) {
-          const audio = MusicManager.audio;
-          if (audio) {
-            audio.pause();
-            if (audio.src && audio.src.startsWith('blob:')) {
-              URL.revokeObjectURL(audio.src);
-            }
-            audio.src = '';
-          }
-          
-          localStorage.removeItem('musicFileName');
-          localStorage.setItem('musicWasPlaying', 'false');
-          
-          setMusicFileName('');
-          setMusicIsPlaying(false);
-          
-          if (fileInputRef.current) {
-            fileInputRef.current.value = '';
-          }
-          
-          console.log('🗑️ 배경음악 삭제됨');
-          alert('배경음악이 삭제되었습니다.');
-        }
-      };
-
       // 음악 토글
       const handleMusicToggle = () => {
-        MusicManager.toggle();
-        setMusicIsPlaying(MusicManager.isPlaying());
+        if (audioRef.current) {
+          if (audioRef.current.paused) {
+            audioRef.current.play().catch(e => {
+              console.log('재생 실패:', e);
+              alert('음악을 재생할 수 없습니다. 음악 파일 URL을 확인하세요.');
+            });
+          } else {
+            audioRef.current.pause();
+          }
+        }
       };
 
       // 음량 조절
       const handleVolumeChange = (e) => {
         const newVolume = parseInt(e.target.value);
         setMusicVolume(newVolume);
-        MusicManager.setVolume(newVolume);
+        
+        if (audioRef.current) {
+          audioRef.current.volume = newVolume / 100;
+        }
+        
+        localStorage.setItem('musicVolume', newVolume);
       };
 
       // 음량에 따른 아이콘 결정
       const getMusicIcon = () => {
-        if (!MusicManager.hasFile()) return '❌';
         if (musicVolume === 0) return '🔇';
         if (musicVolume < 33) return '🔈';
         if (musicVolume < 67) return '🔉';
@@ -615,52 +476,24 @@
 
       return (
         <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-white">
-          {/* 배경음악 업로드 모달 */}
-          {showMusicUploadModal && (
-            <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
-              <div className="w-full max-w-md">
-                <div className="bg-slate-800 rounded-xl shadow-2xl p-8 border border-slate-700 relative">
-                  <button onClick={() => setShowMusicUploadModal(false)} className="absolute top-4 right-4 text-slate-400 hover:text-white transition">
-                    <i data-lucide="x" style={{width: 20, height: 20}}></i>
-                  </button>
-                  
-                  <h2 className="text-2xl font-bold mb-2 text-white">배경음악 업로드</h2>
-                  <p className="text-slate-400 mb-6">MP3, WAV, OGG, M4A 파일을 업로드해주세요 (최대 50MB)</p>
-                  
-                  <div className="space-y-4">
-                    <input 
-                      ref={fileInputRef}
-                      type="file" 
-                      accept="audio/*"
-                      onChange={handleMusicFileUpload}
-                      className="hidden"
-                      id="music-file-input"
-                    />
-                    
-                    <label htmlFor="music-file-input" className="block w-full bg-cyan-600 hover:bg-cyan-700 text-white font-bold py-3 px-4 rounded-lg transition cursor-pointer text-center">
-                      파일 선택
-                    </label>
-                    
-                    {musicFileName && (
-                      <div className="bg-slate-700/50 border border-slate-600 rounded-lg p-4">
-                        <p className="text-slate-400 text-sm mb-2">현재 음악</p>
-                        <p className="text-white font-medium truncate">{musicFileName}</p>
-                      </div>
-                    )}
-                    
-                    {musicFileName && (
-                      <button 
-                        onClick={handleMusicFileDelete}
-                        className="w-full flex items-center justify-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 px-4 py-2 rounded-lg transition"
-                      >
-                        <i data-lucide="trash-2" style={{width: 16, height: 16}}></i> 배경음악 삭제
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+          {/* 오디오 태그 - GitHub Pages 음악 URL 사용 */}
+          <audio 
+            ref={audioRef} 
+            loop 
+            style={{ display: 'none' }}
+            onplay={() => {
+              setMusicIsPlaying(true);
+              localStorage.setItem('musicWasPlaying', 'true');
+            }}
+            onpause={() => {
+              setMusicIsPlaying(false);
+              localStorage.setItem('musicWasPlaying', 'false');
+            }}
+            onerror={() => {
+              console.error('🎵 음악 파일을 로드할 수 없습니다. URL을 확인하세요.');
+              console.log('시도한 URL:', MUSIC_URL);
+            }}
+          />
 
           {showLoginModal && (
              <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
@@ -698,7 +531,7 @@
                   <button 
                     onClick={handleMusicToggle}
                     className="text-cyan-400 hover:text-cyan-300 transition text-lg"
-                    title={musicIsPlaying ? '음악 정지' : '음악 재생'}
+                    title={musicIsPlaying ? '음악 정지' : '음악 재play'}
                   >
                     {getMusicIcon()}
                   </button>
@@ -719,16 +552,10 @@
                       <span className="text-sm">관리자 로그인</span>
                   </button>
                 ) : (
-                  <>
-                    <button onClick={() => setShowMusicUploadModal(true)} className="flex items-center gap-2 bg-purple-600/20 hover:bg-purple-600/30 text-purple-400 px-4 py-2 rounded-lg transition">
-                        <i data-lucide="music" style={{width: 18, height: 18}}></i>
-                        <span className="text-sm">배경음악</span>
-                    </button>
-                    <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 px-4 py-2 rounded-lg transition">
-                        <i data-lucide="log-out" style={{width: 18, height: 18}}></i>
-                        <span className="text-sm">로그아웃</span>
-                    </button>
-                  </>
+                  <button onClick={handleLogout} className="flex items-center gap-2 bg-red-600/20 hover:bg-red-600/30 text-red-400 px-4 py-2 rounded-lg transition">
+                      <i data-lucide="log-out" style={{width: 18, height: 18}}></i>
+                      <span className="text-sm">로그아웃</span>
+                  </button>
                 )}
               </div>
             </div>
