@@ -9,12 +9,38 @@
   <script src="https://unpkg.com/react-dom@17/umd/react-dom.development.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database.js"></script>
 </head>
 <body>
   <div id="root"></div>
 
   <script type="text/babel">
     const { useState, useEffect, useRef } = React;
+
+    // ============ Firebase 설정 ============
+    // 🔴 중요: Firebase 콘솔에서 복사한 설정으로 수정하세요
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_PROJECT.firebaseapp.com",
+      databaseURL: "https://YOUR_PROJECT.firebaseio.com",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_PROJECT.appspot.com",
+      messagingSenderId: "YOUR_MESSAGING_ID",
+      appId: "YOUR_APP_ID"
+    };
+
+    // Firebase 초기화
+    let db = null;
+    try {
+      firebase.initializeApp(firebaseConfig);
+      db = firebase.database();
+      console.log('✅ Firebase 연결 성공');
+    } catch (error) {
+      console.error('❌ Firebase 연결 실패:', error);
+      alert('⚠️ Firebase 설정이 필요합니다.\n\nFirebase 콘솔에서 설정 값을 복사하여 코드의 firebaseConfig를 수정해주세요.\n\n가이드: FIREBASE_설정_가이드.md 참조');
+    }
 
     // ============ 유틸리티 함수 ============
     const convertToEmbedUrl = (url, autoplay = false, mute = false, loop = false) => {
@@ -64,7 +90,7 @@
       return 'unknown';
     };
 
-    // ============ 컴포넌트 ============
+    // ============ MediaCard 컴포넌트 ============
     const MediaCard = ({ media, onDelete, isLoggedIn }) => {
       const mediaType = detectMediaType(media.url);
       let embedUrl = null;
@@ -163,6 +189,7 @@
       );
     };
 
+    // ============ ListItem 컴포넌트 ============
     const ListItem = ({ item, onUpdate, onDelete, isLoggedIn }) => {
         const [isEditing, setIsEditing] = useState(false);
         const [text, setText] = useState(item.text);
@@ -211,63 +238,33 @@
       const audioRef = useRef(null);
       const fileInputRef = useRef(null);
 
-      // localStorage 헬퍼 함수
-      const getStorageData = (key, defaultValue) => {
-        try {
-          const item = localStorage.getItem(key);
-          return item ? JSON.parse(item) : defaultValue;
-        } catch (e) {
-          console.error('Storage read error:', e);
-          return defaultValue;
-        }
-      };
-
-      const setStorageData = (key, value) => {
-        try {
-          localStorage.setItem(key, JSON.stringify(value));
-        } catch (e) {
-          console.error('Storage write error:', e);
-        }
-      };
-
       // 상태 초기화
-      const [mainVideoUrl, setMainVideoUrl] = useState(
-        getStorageData('mainVideoUrl', convertToEmbedUrl('https://youtu.be/gqos6G0MnzM', true, true, true))
-      );
-
-      const [workItems, setWorkItems] = useState(
-        getStorageData('workItems', [
-          { id: 1, text: '신입 사원 업무 교육' },
-          { id: 2, text: '기존 사원 업무 교육' },
-          { id: 3, text: '온라인/오프라인 강의' },
-          { id: 4, text: 'CS 교육 기획 및 진행' },
-          { id: 5, text: '영상 교육 제작' },
-          { id: 6, text: '개인정보 보호 교육 기획 및 진행' },
-          { id: 7, text: '간단한 프로그램 개발' },
-          { id: 8, text: '상담 모니터링 진행 및 분석 보고' },
-          { id: 9, text: '프로모션 기획 및 진행' },
-        ])
-      );
-
-      const [toolItems, setToolItems] = useState(
-        getStorageData('toolItems', [
-          { id: 1, text: 'Microsoft Excel' },
-          { id: 2, text: 'Microsoft PowerPoint' },
-          { id: 3, text: 'Teams' },
-          { id: 4, text: 'Zoom' },
-          { id: 5, text: 'Premiere Pro' },
-          { id: 6, text: 'Aftereffect' },
-          { id: 7, text: 'Chat GPT / Python / Notion' },
-          { id: 8, text: '다양한 AI 툴' },
-        ])
-      );
-
-      const [portfolioMedias, setPortfolioMedias] = useState(
-        getStorageData('portfolioMedias', [
-          { id: 1, title: '개인정보 유용 사례 교육', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
-          { id: 2, title: '개인정보 유출 사례2', url: 'https://youtu.be/jNQXAC9IVRw' }
-        ])
-      );
+      const [mainVideoUrl, setMainVideoUrl] = useState(convertToEmbedUrl('https://youtu.be/gqos6G0MnzM', true, true, true));
+      const [workItems, setWorkItems] = useState([
+        { id: 1, text: '신입 사원 업무 교육' },
+        { id: 2, text: '기존 사원 업무 교육' },
+        { id: 3, text: '온라인/오프라인 강의' },
+        { id: 4, text: 'CS 교육 기획 및 진행' },
+        { id: 5, text: '영상 교육 제작' },
+        { id: 6, text: '개인정보 보호 교육 기획 및 진행' },
+        { id: 7, text: '간단한 프로그램 개발' },
+        { id: 8, text: '상담 모니터링 진행 및 분석 보고' },
+        { id: 9, text: '프로모션 기획 및 진행' },
+      ]);
+      const [toolItems, setToolItems] = useState([
+        { id: 1, text: 'Microsoft Excel' },
+        { id: 2, text: 'Microsoft PowerPoint' },
+        { id: 3, text: 'Teams' },
+        { id: 4, text: 'Zoom' },
+        { id: 5, text: 'Premiere Pro' },
+        { id: 6, text: 'Aftereffect' },
+        { id: 7, text: 'Chat GPT / Python / Notion' },
+        { id: 8, text: '다양한 AI 툴' },
+      ]);
+      const [portfolioMedias, setPortfolioMedias] = useState([
+        { id: 1, title: '개인정보 유용 사례 교육', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
+        { id: 2, title: '개인정보 유출 사례2', url: 'https://youtu.be/jNQXAC9IVRw' }
+      ]);
 
       const [isLoggedIn, setIsLoggedIn] = useState(false);
       const [showLoginModal, setShowLoginModal] = useState(false);
@@ -278,7 +275,6 @@
       const [newMediaTitle, setNewMediaTitle] = useState('');
       const [newMediaUrl, setNewMediaUrl] = useState('');
       
-      // GitHub 배경음악 URL (변경 가능)
       const GITHUB_MUSIC_URL = 'https://raw.githubusercontent.com/aisiae/testproduct/main/music/%ED%96%87%EC%82%B4%EC%9D%B4%20%EB%93%9C%EB%A6%AC%EC%9A%B0%EB%8A%94%20%EB%93%AF%ED%95%9C%20%EC%8B%9C%EC%9E%91%EC%9D%84%20%EC%95%8C%EB%A6%AC%EB%8A%94%20%EC%A1%B0%EC%9A%A9%ED%95%98%EC%A7%80%EB%A7%8C%20%EB%B0%9D%EC%9D%80%20%EB%B0%B0%EA%B2%BD.mp3';
       const DEFAULT_MUSIC_FILENAME = '햇살이 드리우는 듯한 시작을 알리는 조용하지만 밝은 배경.mp3';
       
@@ -287,31 +283,72 @@
       const [isPlaying, setIsPlaying] = useState(false);
       const [volume, setVolume] = useState(0.3);
       const [isMuted, setIsMuted] = useState(false);
+      const [syncStatus, setSyncStatus] = useState('로딩 중...');
 
       const ADMIN_PASSWORD = 'wjdwldud2025';
       const email = 'jiyoung1013@gmail.com';
       const phone = '010-4007-1417';
 
-      // ============ localStorage 동기화 ============
+      // ============ Firebase 데이터 로드 ============
       useEffect(() => {
-        setStorageData('mainVideoUrl', mainVideoUrl);
-      }, [mainVideoUrl]);
+        if (!db) {
+          setSyncStatus('❌ Firebase 설정 필요');
+          return;
+        }
 
-      useEffect(() => {
-        setStorageData('workItems', workItems);
-      }, [workItems]);
+        setSyncStatus('🔄 Firebase에서 로드 중...');
+        
+        const dataRef = db.ref('portfolio-data');
+        
+        dataRef.on('value', (snapshot) => {
+          const data = snapshot.val();
+          if (data) {
+            if (data.mainVideoUrl) setMainVideoUrl(data.mainVideoUrl);
+            if (data.workItems) setWorkItems(data.workItems);
+            if (data.toolItems) setToolItems(data.toolItems);
+            if (data.portfolioMedias) setPortfolioMedias(data.portfolioMedias);
+            setSyncStatus('✅ Firebase 동기화 완료');
+            console.log('✅ Firebase에서 데이터 로드 성공');
+          } else {
+            setSyncStatus('✅ Firebase 준비됨');
+          }
+        }, (error) => {
+          setSyncStatus('⚠️ 로드 실패');
+          console.error('Firebase 로드 오류:', error);
+        });
 
-      useEffect(() => {
-        setStorageData('toolItems', toolItems);
-      }, [toolItems]);
-
-      useEffect(() => {
-        setStorageData('portfolioMedias', portfolioMedias);
-      }, [portfolioMedias]);
-
-      useEffect(() => {
-        lucide.createIcons();
+        return () => dataRef.off();
       }, []);
+
+      // ============ Firebase 데이터 저장 ============
+      const saveToFirebase = (data) => {
+        if (!db) {
+          console.warn('Firebase 연결 안 됨');
+          return;
+        }
+        
+        db.ref('portfolio-data').set(data, (error) => {
+          if (error) {
+            console.error('Firebase 저장 오류:', error);
+            alert('⚠️ Firebase 저장 실패: ' + error.message);
+          } else {
+            console.log('✅ Firebase에 저장 성공');
+            setSyncStatus('✅ 클라우드에 저장됨');
+          }
+        });
+      };
+
+      // ============ 데이터 변경 시 Firebase 저장 ============
+      useEffect(() => {
+        if (isLoggedIn) {
+          saveToFirebase({
+            mainVideoUrl,
+            workItems,
+            toolItems,
+            portfolioMedias
+          });
+        }
+      }, [mainVideoUrl, workItems, toolItems, portfolioMedias]);
 
       // ============ 배경음악 자동재생 ============
       useEffect(() => {
@@ -319,7 +356,6 @@
           audioRef.current.volume = volume;
           audioRef.current.muted = isMuted;
           
-          // 자동재생 시도
           const playPromise = audioRef.current.play();
           if (playPromise !== undefined) {
             playPromise
@@ -334,6 +370,10 @@
           }
         }
       }, [backgroundMusicUrl]);
+
+      useEffect(() => {
+        lucide.createIcons();
+      }, []);
 
       // ============ 핸들러 함수들 ============
       const handleLogin = (e) => {
@@ -462,7 +502,6 @@
         setVolume(newVolume);
         if (audioRef.current) {
           audioRef.current.volume = newVolume;
-          // 음량을 조절하면 자동으로 음소거 해제
           if (isMuted && newVolume > 0) {
             setIsMuted(false);
             audioRef.current.muted = false;
@@ -529,9 +568,12 @@
           )}
 
           <nav className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur border-b border-slate-700/50">
-            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center">
-              <h1 className="text-2xl font-bold text-cyan-400">J-PROJECT</h1>
-              <div className="flex items-center gap-4">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex justify-between items-center flex-wrap gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-cyan-400">J-PROJECT</h1>
+                <p className="text-xs text-slate-500 mt-1">{syncStatus}</p>
+              </div>
+              <div className="flex items-center gap-4 flex-wrap">
                 {backgroundMusicUrl && (
                   <div className="flex items-center gap-3 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2">
                     <button 
